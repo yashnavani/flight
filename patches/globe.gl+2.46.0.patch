@@ -1,0 +1,29 @@
+diff --git a/node_modules/globe.gl/dist/globe.gl.mjs b/node_modules/globe.gl/dist/globe.gl.mjs
+index d602558..7eadbbb 100644
+--- a/node_modules/globe.gl/dist/globe.gl.mjs
++++ b/node_modules/globe.gl/dist/globe.gl.mjs
+@@ -454,7 +454,7 @@ var globe = Kapsule({
+     },
+     toGlobeCoords: function toGlobeCoords(state, x, y) {
+       var globeIntersects = state.renderObjs.intersectingObjects(x, y).find(function (d) {
+-        return (d.object.__globeObjType || d.object.parent.__globeObjType) === 'globe';
++        return d.object && (d.object.__globeObjType || d.object.parent && d.object.parent.__globeObjType) === 'globe';
+       });
+       if (!globeIntersects) return null; // coords outside globe
+ 
+@@ -722,6 +722,7 @@ var globe = Kapsule({
+         custom: state.onCustomLayerClick
+       };
+       var globeObj = getGlobeObj(obj);
++      if (!globeObj) return;
+       var objType = globeObj.__globeObjType;
+       if (globeObj && objFns.hasOwnProperty(objType) && objFns[objType]) {
+         var args = [ev];
+@@ -762,6 +763,7 @@ var globe = Kapsule({
+         custom: state.onCustomLayerRightClick
+       };
+       var globeObj = getGlobeObj(obj);
++      if (!globeObj) return;
+       var objType = globeObj.__globeObjType;
+       if (globeObj && objFns.hasOwnProperty(objType) && objFns[objType]) {
+         var args = [ev];

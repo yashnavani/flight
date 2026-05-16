@@ -1,0 +1,149 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #1e293b;
+    --foreground: #f1f5f9;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+
+@keyframes radar-sweep {
+  from {
+    transform: rotate(0deg);
+    opacity: 0.35;
+  }
+  to {
+    transform: rotate(360deg);
+    opacity: 0.9;
+  }
+}
+
+.radar-sweep {
+  border-style: dashed;
+  animation: radar-sweep 1.8s linear infinite;
+}
+
+@keyframes toast-wiggle {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  35% {
+    transform: rotate(-0.45deg);
+  }
+  70% {
+    transform: rotate(0.35deg);
+  }
+}
+
+.toast-wiggle {
+  animation: toast-wiggle 0.45s ease-out;
+}
+
+/* Radar shell — glass + hairline (used with existing gradient layers) */
+.radar-chrome {
+  border: 1px solid rgb(255 255 255 / 0.07);
+  background: rgb(2 6 23 / 0.42);
+  box-shadow:
+    0 20px 50px -24px rgb(0 0 0 / 0.65),
+    inset 0 1px 0 rgb(255 255 255 / 0.06);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.radar-chrome-subtle {
+  border: 1px solid rgb(255 255 255 / 0.06);
+  background: rgb(2 6 23 / 0.38);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Leaflet — full-bleed host + compact attribution (see https://leafletjs.com/) */
+.radar-leaflet-host.leaflet-container,
+.radar-leaflet-host .leaflet-container {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  min-width: 100%;
+  background: rgb(15 23 42);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+}
+.radar-leaflet-host .leaflet-control-attribution {
+  font-size: 9px;
+  max-width: min(92vw, 52rem);
+  line-height: 1.35;
+  background: rgb(2 6 23 / 0.82);
+  color: rgb(148 163 184 / 0.95);
+}
+.radar-leaflet-host .leaflet-control-zoom a {
+  color: rgb(226 232 240);
+  background: rgb(15 23 42 / 0.92);
+}
+
+/* Aircraft markers — DivIcon, no default white tile */
+.radar-leaflet-host .radar-ac-plane-marker.leaflet-div-icon,
+.radar-ac-plane-marker.leaflet-div-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.radar-ac-plane-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.radar-ac-plane-wrap svg {
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.45));
+}
+.radar-leaflet-tip.leaflet-tooltip {
+  background: rgb(2 6 23 / 0.92);
+  color: rgb(241 245 249);
+  border: 1px solid rgb(251 191 36 / 0.35);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+@keyframes love-plane-click-heart {
+  0% {
+    opacity: 0;
+    transform: translate3d(calc(-50% + var(--love-drift, 0px)), 0, 0) scale(0.32);
+  }
+  16% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(
+        calc(-50% + var(--love-drift, 0px)),
+        var(--love-rise, -32vh),
+        0
+      )
+      scale(1.02);
+  }
+}
+
+.love-plane-click-heart {
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: love-plane-click-heart 1s cubic-bezier(0.18, 0.82, 0.32, 1) forwards;
+  filter: drop-shadow(0 0 10px rgb(251 113 133 / 0.38));
+}
