@@ -5,8 +5,25 @@ import type {
 } from "@/lib/openskyFlightContext";
 import { mergeEstAirports, openSkyPickFromRecentWindow } from "@/lib/openSkyFlightsRecent";
 
+/** Pro / Fluid; Hobby still clamps (10s) — soft-fail avoids hard errors on slow links. */
+export const maxDuration = 25;
+
 const UPSTREAM = "https://api.adsb.lol/v2/hex";
 const UA = "HerFlightRadar/1.0 (+https://github.com)";
+
+const CACHE_OK = {
+  headers: { "Cache-Control": "public, max-age=45, stale-while-revalidate=120" },
+};
+
+function emptyOk(extra: Partial<OpenSkyFlightContextResponse> = {}): OpenSkyFlightContextResponse {
+  return {
+    ok: true,
+    window: { begin: 0, end: 0 },
+    matches: 0,
+    flight: null,
+    ...extra,
+  };
+}
 
 function str(v: unknown): string | null {
   if (v === null || v === undefined) return null;
@@ -25,113 +42,134 @@ export async function GET(req: NextRequest) {
 
   const url = `${UPSTREAM}/${encodeURIComponent(icao24)}`;
 
+  let res: Response;
+  let text: string;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       headers: { Accept: "application/json", "User-Agent": UA },
       next: { revalidate: 0 },
-      signal: AbortSignal.timeout(8_000),
+      /** Slow networks / ADSB cold start — not rate limit; abort shows as timeout. */
+      signal: AbortSignal.timeout(18_000),
     });
-    const text = await res.text();
-    if (!res.ok) {
+    text = await res.text();
+  } catch {
+    return NextResponse.json(
+      { ...emptyOk({ detailSkipped: true }) },
+      { status: 200, headers: { "Cache-Control": "public, max-age=12, stale-while-revalidate=40" } },
+    );
+  }
+
+  if (!res.ok) {
+    if (res.status === 429) {
       return NextResponse.json(
-        { ok: false, error: res.statusText, detail: text.slice(0, 400) },
-        { status: res.status === 429 ? 429 : 502 },
+        { ...emptyOk({ rateLimited: true }) },
+        { status: 200, headers: { "Cache-Control": "public, max-age=20, stale-while-revalidate=60" } },
       );
     }
-    const json = JSON.parse(text) as { ac?: Record<string, unknown>[]; now?: number };
-    const rowRec =
-      Array.isArray(json.ac) && json.ac[0] ? (json.ac[0] as Record<string, unknown>) : null;
-    function filedDep(o: Record<string, unknown>): string | null {
-      return (
-        str(o.estDepartureAirport) ??
-        str(o.origin) ??
-        str(o.flight_origin) ??
-        str(o.departure) ??
-        str(o.from) ??
-        str(o.orig_iata) ??
-        str(o.o_icao) ??
-        str(o.icao_origin) ??
-        str(o.planned_departure_airport) ??
-        str(o.planned_dep_airport) ??
-        str(o.schd_from) ??
-        str(o.scheduled_departure_airport)
-      );
-    }
+    return NextResponse.json(
+      { ...emptyOk({ detailSkipped: true }) },
+      { status: 200, headers: { "Cache-Control": "public, max-age=15, stale-while-revalidate=45" } },
+    );
+  }
 
-    function filedArr(o: Record<string, unknown>): string | null {
-      return (
-        str(o.estArrivalAirport) ??
-        str(o.destination) ??
-        str(o.flight_destination) ??
-        str(o.arrival) ??
-        str(o.to) ??
-        str(o.dest_iata) ??
-        str(o.d_icao) ??
-        str(o.icao_destination) ??
-        str(o.planned_arrival_airport) ??
-        str(o.planned_arr_airport) ??
-        str(o.schd_to) ??
-        str(o.scheduled_arrival_airport)
-      );
-    }
+  let json: { ac?: Record<string, unknown>[]; now?: number };
+  try {
+    json = JSON.parse(text) as { ac?: Record<string, unknown>[]; now?: number };
+  } catch {
+    return NextResponse.json({ ...emptyOk({ detailSkipped: true }) }, { status: 200, ...CACHE_OK });
+  }
 
-    function routeFromStringField(o: Record<string, unknown>): { dep: string | null; arr: string | null } {
-      const raw = str(o.route) ?? str(o.filed_route) ?? str(o.flight_route);
-      if (!raw) return { dep: null, arr: null };
-      const parts = raw
-        .split(/[-–—/]+/)
-        .map((x) => x.trim().toUpperCase())
-        .filter((x) => /^[A-Z0-9]{3,4}$/.test(x));
-      if (parts.length >= 2) {
-        const dep = /^[A-Z0-9]{3,4}$/.test(parts[0]) ? parts[0] : null;
-        const last = parts[parts.length - 1];
-        const arr = /^[A-Z0-9]{3,4}$/.test(last) ? last : null;
-        return { dep, arr };
+  const rowRec =
+    Array.isArray(json.ac) && json.ac[0] ? (json.ac[0] as Record<string, unknown>) : null;
+
+  function filedDep(o: Record<string, unknown>): string | null {
+    return (
+      str(o.estDepartureAirport) ??
+      str(o.origin) ??
+      str(o.flight_origin) ??
+      str(o.departure) ??
+      str(o.from) ??
+      str(o.orig_iata) ??
+      str(o.o_icao) ??
+      str(o.icao_origin) ??
+      str(o.planned_departure_airport) ??
+      str(o.planned_dep_airport) ??
+      str(o.schd_from) ??
+      str(o.scheduled_departure_airport)
+    );
+  }
+
+  function filedArr(o: Record<string, unknown>): string | null {
+    return (
+      str(o.estArrivalAirport) ??
+      str(o.destination) ??
+      str(o.flight_destination) ??
+      str(o.arrival) ??
+      str(o.to) ??
+      str(o.dest_iata) ??
+      str(o.d_icao) ??
+      str(o.icao_destination) ??
+      str(o.planned_arrival_airport) ??
+      str(o.planned_arr_airport) ??
+      str(o.schd_to) ??
+      str(o.scheduled_arrival_airport)
+    );
+  }
+
+  function routeFromStringField(o: Record<string, unknown>): { dep: string | null; arr: string | null } {
+    const raw = str(o.route) ?? str(o.filed_route) ?? str(o.flight_route);
+    if (!raw) return { dep: null, arr: null };
+    const parts = raw
+      .split(/[-–—/]+/)
+      .map((x) => x.trim().toUpperCase())
+      .filter((x) => /^[A-Z0-9]{3,4}$/.test(x));
+    if (parts.length >= 2) {
+      const dep = /^[A-Z0-9]{3,4}$/.test(parts[0]) ? parts[0] : null;
+      const last = parts[parts.length - 1];
+      const arr = /^[A-Z0-9]{3,4}$/.test(last) ? last : null;
+      return { dep, arr };
+    }
+    return { dep: null, arr: null };
+  }
+
+  const routePair = rowRec ? routeFromStringField(rowRec) : { dep: null, arr: null };
+
+  let flight: OpenSkyFlightContextFlight | null = rowRec
+    ? {
+        icao24: str(rowRec.hex)?.toLowerCase() ?? icao24,
+        callsign: str(rowRec.flight),
+        firstSeen: null as number | null,
+        lastSeen: null as number | null,
+        estDepartureAirport: filedDep(rowRec) ?? routePair.dep,
+        estArrivalAirport: filedArr(rowRec) ?? routePair.arr,
+        registration: str(rowRec.r),
+        typeCode: str(rowRec.t),
       }
-      return { dep: null, arr: null };
-    }
+    : null;
 
-    const routePair = rowRec ? routeFromStringField(rowRec) : { dep: null, arr: null };
+  let rateLimited = false;
+  const needRoute = !flight || !flight.estDepartureAirport || !flight.estArrivalAirport;
 
-    let flight: OpenSkyFlightContextFlight | null = rowRec
-      ? {
-          icao24: str(rowRec.hex)?.toLowerCase() ?? icao24,
-          callsign: str(rowRec.flight),
-          firstSeen: null as number | null,
-          lastSeen: null as number | null,
-          estDepartureAirport: filedDep(rowRec) ?? routePair.dep,
-          estArrivalAirport: filedArr(rowRec) ?? routePair.arr,
-          registration: str(rowRec.r),
-          typeCode: str(rowRec.t),
-        }
-      : null;
-
-    let rateLimited = false;
-    const needRoute =
-      !flight || !flight.estDepartureAirport || !flight.estArrivalAirport;
-
-    if (needRoute) {
+  if (needRoute) {
+    try {
       const { pick, rateLimited: rl } = await openSkyPickFromRecentWindow(
         icao24,
         flight?.callsign ?? null,
       );
       rateLimited = rl;
       if (pick) flight = mergeEstAirports(flight, pick);
+    } catch {
+      /* supplement only */
     }
-
-    const body: OpenSkyFlightContextResponse = {
-      ok: true,
-      window: { begin: 0, end: 0 },
-      matches: rowRec ? 1 : 0,
-      flight,
-      ...(rateLimited ? { rateLimited: true } : {}),
-    };
-
-    return NextResponse.json(body, {
-      headers: { "Cache-Control": "public, max-age=45, stale-while-revalidate=120" },
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "fetch failed";
-    return NextResponse.json({ ok: false, error: msg }, { status: 502 });
   }
+
+  const body: OpenSkyFlightContextResponse = {
+    ok: true,
+    window: { begin: 0, end: 0 },
+    matches: rowRec ? 1 : 0,
+    flight,
+    ...(rateLimited ? { rateLimited: true } : {}),
+  };
+
+  return NextResponse.json(body, CACHE_OK);
 }

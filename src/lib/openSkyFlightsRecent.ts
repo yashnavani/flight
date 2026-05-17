@@ -15,44 +15,50 @@ export async function openSkyPickFromRecentWindow(
   icao24: string,
   callsignHint: string | null,
 ): Promise<{ pick: OpenSkyFlightContextFlight | null; rateLimited: boolean }> {
-  const end = Math.floor(Date.now() / 1000);
-  const begin = end - 7200;
-
-  const headers: Record<string, string> = { Accept: "application/json" };
   try {
-    const t = await getOpenSkyBearerToken();
-    if (t) headers.Authorization = `Bearer ${t}`;
+    const end = Math.floor(Date.now() / 1000);
+    const begin = end - 7200;
+
+    const headers: Record<string, string> = { Accept: "application/json" };
+    try {
+      const t = await getOpenSkyBearerToken();
+      if (t) headers.Authorization = `Bearer ${t}`;
+    } catch {
+      /* anonymous */
+    }
+
+    /** Budget for Hobby 10s wall with ADSB hex already done; supplement only — never throw. */
+    const res = await fetch(`${OPENSKY_FLIGHTS_ALL}?begin=${begin}&end=${end}`, {
+      headers,
+      next: { revalidate: 0 },
+      signal: AbortSignal.timeout(3_500),
+    });
+
+    if (res.status === 429) return { pick: null, rateLimited: true };
+    if (res.status === 404) return { pick: null, rateLimited: false };
+    if (!res.ok) return { pick: null, rateLimited: false };
+
+    let json: unknown;
+    try {
+      json = JSON.parse(await res.text());
+    } catch {
+      return { pick: null, rateLimited: false };
+    }
+
+    if (!Array.isArray(json)) return { pick: null, rateLimited: false };
+
+    const rows = json
+      .map(parseOpenSkyFlightRow)
+      .filter((x): x is OpenSkyFlightContextFlight => x !== null);
+
+    return {
+      pick: pickFlightForIcao(rows, icao24, callsignHint),
+      rateLimited: false,
+    };
   } catch {
-    /* anonymous */
-  }
-
-  const res = await fetch(`${OPENSKY_FLIGHTS_ALL}?begin=${begin}&end=${end}`, {
-    headers,
-    next: { revalidate: 0 },
-    signal: AbortSignal.timeout(12_000),
-  });
-
-  if (res.status === 429) return { pick: null, rateLimited: true };
-  if (res.status === 404) return { pick: null, rateLimited: false };
-  if (!res.ok) return { pick: null, rateLimited: false };
-
-  let json: unknown;
-  try {
-    json = JSON.parse(await res.text());
-  } catch {
+    /* Timeout, reset, parse — route still serves ADSB strip. */
     return { pick: null, rateLimited: false };
   }
-
-  if (!Array.isArray(json)) return { pick: null, rateLimited: false };
-
-  const rows = json
-    .map(parseOpenSkyFlightRow)
-    .filter((x): x is OpenSkyFlightContextFlight => x !== null);
-
-  return {
-    pick: pickFlightForIcao(rows, icao24, callsignHint),
-    rateLimited: false,
-  };
 }
 
 /** Fill only missing filed airports / callsign from OpenSky row. */

@@ -17,9 +17,34 @@ export function useFlightContextPipeline(selected: Aircraft | null) {
     retry: 0,
     queryFn: async (): Promise<OpenSkyFlightContextResponse> => {
       const q = new URLSearchParams({ icao24: icao! });
-      const r = await fetch(`/api/adsb/aircraft-detail?${q}`, { cache: "no-store" });
-      const j = (await r.json()) as OpenSkyFlightContextResponse & { error?: string };
-      if (!r.ok) throw new Error(j.error || "flight context");
+      let r: Response;
+      try {
+        r = await fetch(`/api/adsb/aircraft-detail?${q}`, { cache: "no-store" });
+      } catch {
+        return {
+          ok: true,
+          flight: null,
+          matches: 0,
+          window: { begin: 0, end: 0 },
+          detailSkipped: true,
+        };
+      }
+      let j: OpenSkyFlightContextResponse & { error?: string };
+      try {
+        j = (await r.json()) as OpenSkyFlightContextResponse & { error?: string };
+      } catch {
+        return {
+          ok: true,
+          flight: null,
+          matches: 0,
+          window: { begin: 0, end: 0 },
+          detailSkipped: true,
+        };
+      }
+      if (!r.ok) {
+        if (j.ok === true) return j;
+        throw new Error(j.error || `HTTP ${r.status}`);
+      }
       if (!j.ok) throw new Error(j.error || "flight context");
       return j;
     },

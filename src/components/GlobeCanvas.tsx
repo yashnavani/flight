@@ -6,9 +6,10 @@ import * as THREE from "three";
 import type { MajorAirport } from "@/data/majorAirports";
 import type { Aircraft } from "@/lib/opensky";
 import { aircraftToPoint } from "@/lib/opensky";
-import { createAircraftModel } from "@/lib/globeAircraftModel";
+import { createAircraftModel, createPearIslandDotModel } from "@/lib/globeAircraftModel";
 import { globeBasemapIsSatellite, resolveGlobeTileUrl } from "@/lib/globeTiles";
 import { getDefaultHomePov } from "@/radar/constants";
+import { isPearIslandMockIcao, PEAR_ISLAND_ICAO } from "@/lib/pearIsland";
 
 type GlobeAc = ReturnType<typeof aircraftToPoint>;
 
@@ -161,11 +162,15 @@ export default function GlobeCanvas({
 
   const objectThreeObject = useCallback((d: object) => {
     const ac = d as GlobeAc;
+    if (isPearIslandMockIcao(ac.icao24)) {
+      return createPearIslandDotModel(ac.color, ac.markerScale);
+    }
     return createAircraftModel(ac.color, ac.markerScale);
   }, []);
 
   const objectRotation = useCallback((d: object) => {
     const ac = d as GlobeAc;
+    if (isPearIslandMockIcao(ac.icao24)) return { x: 0, y: 0, z: 0 };
     const h = ac.heading;
     const deg = h != null && Number.isFinite(h) ? h : 0;
     return { x: 8, y: 0, z: -deg };
@@ -189,17 +194,24 @@ export default function GlobeCanvas({
         : airportLabels.map((ap) => ({
             lat: ap.lat,
             lng: ap.lng,
-            text: ap.icao,
+            text: ap.icao === PEAR_ISLAND_ICAO ? "Pear Island" : ap.icao,
             icao: ap.icao,
             name: ap.name,
             alt: 0.005,
-            color: "rgba(226,232,240,0.92)",
+            color:
+              ap.icao === PEAR_ISLAND_ICAO
+                ? "rgba(10,38,68,0.98)"
+                : "rgba(226,232,240,0.92)",
           })),
     [airportLabels, suppressHubLabels],
   );
 
-  const hubLabelSize = useCallback((_d: object) => {
+  const hubLabelSize = useCallback((d: object) => {
     const z = Math.max(0.09, camAltBucket);
+    const icao = (d as { icao?: string }).icao;
+    if (icao === PEAR_ISLAND_ICAO) {
+      return Math.min(0.42, 0.1 + z * 0.52);
+    }
     return Math.min(0.22, 0.048 + z * 0.26);
   }, [camAltBucket]);
 
@@ -226,6 +238,7 @@ export default function GlobeCanvas({
 
   const objectLabel = useCallback((d: object) => {
     const a = d as Aircraft;
+    if (isPearIslandMockIcao(a.icao24)) return "";
     const cs = a.callsign ?? a.icao24;
     return `<div style="padding:4px 8px;background:rgba(2,6,23,0.9);border:1px solid rgba(251,191,36,0.42);border-radius:6px;font:12px system-ui;color:#f1f5f9">${cs}</div>`;
   }, []);

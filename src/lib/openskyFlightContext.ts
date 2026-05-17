@@ -15,6 +15,8 @@ export type OpenSkyFlightContextResponse = {
   error?: string;
   /** Upstream 429 — no new row; UI should not retry aggressively. */
   rateLimited?: boolean;
+  /** ADSB hex fetch timed out or failed — live map row still valid. */
+  detailSkipped?: boolean;
   window: { begin: number; end: number };
   /** Rows in the 2h window matching this ICAO24 (0 if none). */
   matches: number;

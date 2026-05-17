@@ -137,6 +137,14 @@ export function FlightSelectionSheet({
             {flightQuery.isError && (
               <p className="text-[12px] text-rose-300/90">Detail lookup failed — {flightQuery.error.message}</p>
             )}
+            {!flightQuery.isError && flightQuery.data?.detailSkipped && !stripBlockingPending && (
+              <p className="text-[11px] text-amber-200/85">
+                Route strip slow or skipped — live stats above are still from ADS-B.
+              </p>
+            )}
+            {!flightQuery.isError && flightQuery.data?.rateLimited && !stripBlockingPending && (
+              <p className="text-[11px] text-amber-200/85">Upstream rate limit — route fill may be partial.</p>
+            )}
             {!flightQuery.isError && (
               <>
                 {hasBothEnds && (

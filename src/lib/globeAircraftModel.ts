@@ -78,3 +78,21 @@ export function createAircraftModel(colorHex: string, scale: number): THREE.Grou
   root.scale.setScalar(scale);
   return root;
 }
+
+/** Flat cyan dot — no emissive / metal (avoids z-fight “flash” when many overlap). */
+export function createPearIslandDotModel(colorHex: string, scale: number): THREE.Group {
+  const root = new THREE.Group();
+  const c = new THREE.Color(colorHex);
+  const mat = new THREE.MeshBasicMaterial({
+    color: c,
+    depthTest: true,
+    depthWrite: true,
+    side: THREE.DoubleSide,
+  });
+  const geo = new THREE.CircleGeometry(0.055, 20);
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.rotation.x = -Math.PI / 2;
+  root.add(mesh);
+  root.scale.setScalar(Math.max(0.35, scale * 0.85));
+  return root;
+}

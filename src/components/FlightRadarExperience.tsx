@@ -13,6 +13,13 @@ import MetarTicker from "@/components/MetarTicker";
 import PrishaWelcomeScreen, {
   WELCOME_SESSION_KEY,
 } from "@/components/PrishaWelcomeScreen";
+import {
+  getPearIslandMockFleet,
+  isPearIslandMockIcao,
+  PEAR_ISLAND_LABEL,
+  shouldShowPearIslandGuidanceLabel,
+  shouldShowPearIslandLoveMessage,
+} from "@/lib/pearIsland";
 import { useRadarApp } from "@/radar/orchestrator";
 
 const GlobeCanvas = dynamic(() => import("@/components/GlobeCanvas"), {
@@ -113,6 +120,7 @@ export default function FlightRadarExperience() {
 
   const onGlobePickWithHearts = useCallback(
     (a: Parameters<typeof app.onGlobePick>[0]) => {
+      if (a && isPearIslandMockIcao(a.icao24)) return;
       if (a) {
         skipHeartEffectRef.current = true;
         setHeartBurstId((n) => n + 1);
@@ -143,6 +151,21 @@ export default function FlightRadarExperience() {
     return { mode: "off" as const };
   }, [app.locatingMe, app.lastGeoFix?.lat, app.lastGeoFix?.lng]);
 
+  const onAirportOrPear = useCallback(
+    (icao: string) => {
+      if (icao === "PEAR") {
+        app.toast.push({
+          tag: "PEAR ISLAND",
+          line: "Zoom in low over the dot — tiny planes spell it.",
+          hue: "cyan",
+        });
+        return;
+      }
+      app.onAirportPick(icao);
+    },
+    [app.onAirportPick, app.toast.push],
+  );
+
   const radarMapProps = useMemo(() => {
     const cap = 4000;
     let aircraft = app.search.displayForGlobe.slice(0, cap);
@@ -152,16 +175,31 @@ export default function FlightRadarExperience() {
       aircraft = app.smoothed.slice(0, cap);
       hubEmpty = app.smoothed.length === 0;
     }
+    if (shouldShowPearIslandLoveMessage(app.view.pov)) {
+      const pear = getPearIslandMockFleet();
+      const room = Math.max(0, cap - pear.length);
+      aircraft = [...pear, ...aircraft.slice(0, room)];
+    }
+    const fetchingEmpty = app.feed.isFetching && hubEmpty;
+    const pearGuide = shouldShowPearIslandGuidanceLabel(app.view.pov);
+    let airportLabels = pearGuide
+      ? [PEAR_ISLAND_LABEL, ...app.airportLabels.filter((a) => a.icao !== "PEAR")]
+      : app.airportLabels.filter((a) => a.icao !== "PEAR");
+    if (fetchingEmpty) {
+      airportLabels = pearGuide ? [PEAR_ISLAND_LABEL] : [];
+    }
+    /** Keep Pear label on globe when fetching empty nearby; otherwise suppress hides all dots. */
+    const suppressHubLabels = fetchingEmpty && !pearGuide;
     return {
       aircraft,
       watchIcao: app.watch.watchSet,
       selectedIcao: app.selection.selectedIcao,
       trail: app.trail,
-      airportLabels: app.airportLabels,
-      suppressHubLabels: app.feed.isFetching && hubEmpty,
+      airportLabels,
+      suppressHubLabels,
       onSelect: onGlobePickWithHearts,
       onViewChange: app.view.onViewChange,
-      onAirportLabelClick: app.onAirportPick,
+      onAirportLabelClick: onAirportOrPear,
       follow: app.follow.follow && !!app.selection.selected,
       followLat: app.selection.selected?.lat ?? null,
       followLng: app.selection.selected?.lng ?? null,
@@ -183,13 +221,16 @@ export default function FlightRadarExperience() {
     app.feed.isFetching,
     onGlobePickWithHearts,
     app.view.onViewChange,
-    app.onAirportPick,
+    onAirportOrPear,
     app.follow.follow,
     app.camera.token,
     app.camera.lat,
     app.camera.lng,
     app.camera.alt,
     app.camera.transitionMs,
+    app.view.pov.lat,
+    app.view.pov.lng,
+    app.view.pov.altitude,
   ]);
 
   return (

@@ -9,6 +9,7 @@ import { aircraftPlaneDivIcon } from "@/lib/leafletAircraftIcon";
 import { metersToFeet } from "@/lib/aviationFormat";
 import { globeAltitudeToLeafletZoom, leafletZoomToGlobeCameraAltitude } from "@/lib/leafletViewSync";
 import type { Aircraft } from "@/lib/opensky";
+import { isPearIslandMockIcao, PEAR_ISLAND_ICAO } from "@/lib/pearIsland";
 import { getDefaultHomePov } from "@/radar/constants";
 
 function acMarkerColor(a: Aircraft): string {
@@ -204,6 +205,25 @@ export default function LeafletRadarMap({
       if (a.lat == null || a.lng == null) continue;
       const sel = a.icao24 === selectedIcao;
       const watch = watchIcao.has(a.icao24);
+      if (isPearIslandMockIcao(a.icao24)) {
+        const fill = sel ? "#fbbf24" : watch ? "#c084fc" : "#22d3ee";
+        const stroke = sel ? "#fff7ed" : "rgba(15,23,42,0.85)";
+        const m = L.circleMarker([a.lat, a.lng], {
+          radius: sel ? 4.5 : 3.25,
+          stroke: true,
+          color: stroke,
+          weight: sel ? 2 : 1,
+          fillColor: fill,
+          fillOpacity: 0.92,
+        });
+        m.bindTooltip("Pear · ✈", { direction: "top", opacity: 0.9, className: "radar-leaflet-tip" });
+        m.on("click", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          onSelect(a);
+        });
+        m.addTo(acLayer);
+        continue;
+      }
       let fill = acMarkerColor(a);
       if (sel) fill = "#fbbf24";
       else if (watch) fill = "#c084fc";
@@ -230,6 +250,26 @@ export default function LeafletRadarMap({
     apLayer.clearLayers();
     if (suppressHubLabels || !onAirportLabelClick) return;
     for (const ap of airportLabels) {
+      if (ap.icao === PEAR_ISLAND_ICAO) {
+        const icon = L.divIcon({
+          className: "pear-island-map-label",
+          html: '<span class="pear-island-dot" aria-hidden="true"></span><span class="pear-island-name">Pear Island</span>',
+          iconSize: [132, 26],
+          iconAnchor: [6, 13],
+        });
+        const m = L.marker([ap.lat, ap.lng], {
+          icon,
+          zIndexOffset: 800,
+          interactive: true,
+        });
+        m.bindTooltip(ap.name, { direction: "top", opacity: 0.95, className: "radar-leaflet-tip" });
+        m.on("click", (ev) => {
+          L.DomEvent.stopPropagation(ev);
+          onAirportLabelClick(ap.icao);
+        });
+        m.addTo(apLayer);
+        continue;
+      }
       const c = L.circleMarker([ap.lat, ap.lng], {
         radius: 5,
         stroke: true,
